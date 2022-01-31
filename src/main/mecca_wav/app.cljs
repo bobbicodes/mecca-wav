@@ -1,4 +1,4 @@
-(ns shadow-reagent.app
+(ns mecca-wav.app
   (:require [reagent.dom :as rdom]))
 
 (defn square-root
@@ -7,7 +7,8 @@
 
 (defn app []
   [:div#app
-   [:h1 "shadow-cljs reagent template"]])
+   [:h1 "mecca-wav"]
+   [:h2 "PCM data browser"]])
 
 (defn render []
   (rdom/render [app]

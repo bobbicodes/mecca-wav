@@ -1,11 +1,11 @@
 ; This is the Calva evaluation results output window.
-; TIPS: The keyboard shortcut `ctrl+alt+c o` shows and focuses this window
+; TIPS: The keyboard shortcut `ctrl+alt+o o` shows and focuses this window
 ;   when connected to a REPL session.
 ; Please see https://calva.io/output/ for more info.
 ; Happy coding! ♥️
 
 ; Jacking in...
-; Starting Jack-in Terminal: npx shadow-cljs -d cider/cider-nrepl:0.26.0 watch :app
+; Starting Jack-in Terminal: npx.cmd shadow-cljs -d cider/cider-nrepl:0.27.4 watch :app
 ; Hooking up nREPL sessions...
 ; Connected session: clj
 ; TIPS: 
@@ -25,26 +25,3 @@ clj꞉shadow.user꞉>  ; Use `alt+enter` to evaluate
 ;    (There is a button in the status bar for this)
 ; Jack-in done.
 cljs꞉cljs.user꞉>  ; Use `alt+enter` to evaluate
-nil
-cljs꞉test.shadow-reagent.app-test꞉> 
-nil
-; ------ WARNING - :undeclared-var -----------------------------------------------
-;  Resource: <eval>:1:10
- Use of undeclared Var test.shadow-reagent.app-test/square-root-test
---------------------------------------------------------------------------------
-
-cljs꞉test.shadow-reagent.app-test꞉> 
-nil
-cljs꞉shadow-reagent.app-test꞉> 
-#'shadow-reagent.app-test/square-root-test
-cljs꞉shadow-reagent.app-test꞉> 
-
-Testing shadow-reagent.app-test
-
-
-Ran 1 tests containing 1 assertions.
-
-0 failures, 0 errors.
-
-nil
-cljs꞉shadow-reagent.app-test꞉> 

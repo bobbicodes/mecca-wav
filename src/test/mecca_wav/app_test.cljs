@@ -1,4 +1,4 @@
-(ns shadow-reagent.app-test
+(ns mecca-wav-test
   (:require [cljs.test :refer [deftest is run-tests]]
             [shadow-reagent.app :as app]))
 
