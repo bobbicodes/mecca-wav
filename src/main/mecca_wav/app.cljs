@@ -1,11 +1,65 @@
 (ns mecca-wav.app
   (:require 
+   [cljs.core.async :refer [<! chan put! close!]]
    [reagent.core :as r]
    [reagent.dom :as rdom]
    [goog.object :as o]
-   [goog.crypt :as crypt]))
+   [goog.crypt :as crypt])
+  (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]]))
 
 (defonce ^:dynamic *context* (js/AudioContext.))
+
+(defn load-sound [named-url]
+  (let [out (chan)
+        req (js/XMLHttpRequest.)]
+    (set! (.-responseType req) "arraybuffer")
+    (set! (.-onload req) (fn [e]
+                           (if (= (.-status req) 200)
+                             (do (put! out (assoc named-url :buffer (.-response req)))
+                                 (close! out))
+                             (close! out))))
+    (.open req "GET" (:url named-url) true)
+    (.send req)
+    out))
+
+(defn decode [named-url]
+  (let [out (chan)]
+    (if (:buffer named-url)
+      (do
+        (.decodeAudioData
+         *context* (:buffer named-url)
+         (fn [decoded-buffer]
+           (put! out (assoc named-url :decoded-buffer decoded-buffer))
+           (close! out))
+         (fn []
+           (.error js/console "Error loading file " (prn named-url))
+           (close! out))))
+      (close! out))
+    out))
+
+(defn get-and-decode [named-url]
+  (go
+    (when-let [s (<! (load-sound named-url))]
+      (<! (decode s)))))
+
+(defn load-samples []
+  (go-loop [result {}
+            sounds (range 1 2)]
+    (if-not (nil? (first sounds))
+      (let [sound (first sounds)          
+            decoded-buffer (<! (get-and-decode {:url (str "/" sound ".mp3")
+                                                :sound sound}))]
+        (prn sound)
+        (prn decoded-buffer)
+        (recur (assoc result sound decoded-buffer)
+               (rest sounds)))
+      result)))
+
+(defonce loading-samples
+  (go
+    (def samples  (<! (load-samples)))
+    (prn "Samples loaded")))
 
 (defn scale
   "Scales a sequence of values to output between t-min and t-max."
@@ -27,10 +81,28 @@
         frame-count (count input)
         buffer (.createBuffer context 1 frame-count sample-rate)
         data (.getChannelData buffer 0)]
-    (doseq [i (range 10000)]
+    (doseq [i (range frame-count)]
       (aset data i (nth input i)))
     buffer))
 
+(def sine-wave (clj->js (scale (for [x (range 20000)]
+                                 (.sin js/Math (/ x 20)))
+                               -1 1)))
+
+(audio-buffer sine-wave *context*)
+
+(defn play-note! []
+   (let [audio-buffer  (:decoded-buffer (get samples 0))
+         sample-source (.createBufferSource *context*)
+         gain (.createGain *context*)]
+     (set! (.-buffer sample-source) audio-buffer)
+     (.setValueAtTime (.-gain gain) 0.4 (.-currentTime *context*))
+     (.connect sample-source gain)
+     (.connect gain (.-destination *context*))
+     (.start sample-source (.-currentTime *context*))
+     sample-source))
+
+(play-note!)
 
 (defonce file-atom (r/atom ""))
 
@@ -69,17 +141,6 @@
       (aset data i (nth input i)))
    (buffer-source buffer))
   )
-
-
-
-#_(defn audio-buffer [context duration]
-  (let [sample-rate 44100
-        frame-count (* sample-rate duration)
-        buffer (.createBuffer context 1 frame-count sample-rate)
-        data (.getChannelData buffer 0)]
-    (doseq [i (range frame-count)]
-      (aset data i (-> (js/Math.random) (* 2.0) (- 1.0))))
-    buffer))
                                     
 (defn buffer-source [buffer]
   (let [source (.createBufferSource *context*)
@@ -191,18 +252,17 @@
   [:div#app
    [file-upload]
    [:div [button "Play"
-        (fn [] (buffer-source (audio-buffer 
-                               (scale (map decimal (map #(apply str %)
-                                                                     (partition 4 @file-atom)))
-                                                   -1 1)
+        (fn [] (buffer-source (audio-buffer (clj->js (scale (for [x (range 100000)]
+                                                              (.sin js/Math (/ x 20)))
+                                                            -1 1))
+                               
                                             *context*
                                )))]]
    [:p]
    [:svg {:width    "100%"
           :view-box (str "0 0 500 150")}
-    [:path {:d            (let [data (let [data  (scale (take 10000 (drop 44 (map decimal (map #(apply str %)
-                                                                                             (partition 4 @file-atom)))))
-                                                        -1 1)
+    [:path {:d            (let [data (let [data  (for [x (range 10000)]
+                                                   (.sin js/Math (/ x 20)))
                                            parts (.floor js/Math (/ (count data) 500))]
                                        (map first (partition parts data)))]
                             (make-path (scale data 0 150) ))
