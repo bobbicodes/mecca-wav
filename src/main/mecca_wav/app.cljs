@@ -85,12 +85,6 @@
       (aset data i (nth input i)))
     buffer))
 
-(def sine-wave (clj->js (scale (for [x (range 20000)]
-                                 (.sin js/Math (/ x 20)))
-                               -1 1)))
-
-(audio-buffer sine-wave *context*)
-
 (defn play-note! []
    (let [audio-buffer  (:decoded-buffer (get samples 0))
          sample-source (.createBufferSource *context*)
@@ -102,45 +96,7 @@
      (.start sample-source (.-currentTime *context*))
      sample-source))
 
-(play-note!)
-
 (defonce file-atom (r/atom ""))
-
-(comment
-  (nth (scale (map decimal (map #(apply str %)
-                                (partition 4 @file-atom)))
-              -1 1)
-       44000)
-
-(repeatedly 10 #(-> (js/Math.random) (* 2.0) (- 1.0)) )
-
-(let [duration 1.0
-      context *context*
-      sample-rate 44100
-      frame-count (* sample-rate duration)
-      buffer (.createBuffer context 1 frame-count sample-rate)
-      data (.getChannelData buffer 0)
-      wav (scale (map decimal (map #(apply str %)
-                                   (partition 4 @file-atom)))
-                 -1 1)]
- (doseq [i (range 10000)]
-      (aset data i (nth wav i)))
-(buffer-source buffer)
-  )
-  
-
-  (let [context *context*
-        input (scale (map decimal (map #(apply str %)
-                                       (partition 4 @file-atom)))
-                     -1 1)
-        sample-rate 44100
-        frame-count (count input)
-        buffer (.createBuffer context 1 frame-count sample-rate)
-        data (.getChannelData buffer 0)]
-    (doseq [i (range frame-count)]
-      (aset data i (nth input i)))
-   (buffer-source buffer))
-  )
                                     
 (defn buffer-source [buffer]
   (let [source (.createBufferSource *context*)
@@ -152,13 +108,6 @@
     (.connect gain (.-destination *context*))
     (.start source (.-currentTime *context*))
     source))
-
-(-> (js/Math.random) (* 2.0) (- 1.0))
-
-(defn square-root
-  [x]
-  (.sqrt js/Math x))
-
 
 (defn file-upload []
   [:input#input
@@ -226,43 +175,29 @@
                      (- 50 (* 2 (nth items bar)))
                       "magenta")))))
 
-(bars '(-1 -1 -1 1 1 1))
-
-(defn make-path-data [x y]
-  (str "L" x " " y))
-
 (defn button [label onclick]
   [:button
    {:on-click onclick}
    label])
 
-
-
 (defn make-path [points]
   (str "M" (apply str (interpose " " (for [x (range (count points))]
                                        (str x " " (nth points x)))))))
-
-(comment
-  
-  )
-
-
 
 (defn app []
   [:div#app
    [file-upload]
    [:div [button "Play"
-        (fn [] (buffer-source (audio-buffer (clj->js (scale (for [x (range 100000)]
-                                                              (.sin js/Math (/ x 20)))
-                                                            -1 1))
-                               
-                                            *context*
-                               )))]]
+        (fn [] (buffer-source (audio-buffer (clj->js (scale (map decimal (map #(apply str %)
+                                                                              (partition 4 @file-atom)))
+                                                            -1 1)
+                                                            ) *context*)))]]
    [:p]
    [:svg {:width    "100%"
           :view-box (str "0 0 500 150")}
-    [:path {:d            (let [data (let [data  (for [x (range 10000)]
-                                                   (.sin js/Math (/ x 20)))
+    [:path {:d            (let [data (let [data  (scale (map decimal (map #(apply str %)
+                                                                          (partition 4 @file-atom)))
+                                                        -1 1)
                                            parts (.floor js/Math (/ (count data) 500))]
                                        (map first (partition parts data)))]
                             (make-path (scale data 0 150) ))
