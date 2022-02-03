@@ -109,11 +109,11 @@
                                        (str x " " (nth points x)))))))
 
 (defn play! [file]
-  (let [bytes (map s2c (partition 2 (map #(apply str %) (partition 2 file))))]
+  (let [bytes (map s2c (partition 2 (map #(apply str %) (partition 2 (drop 44 file)))))]
     (buffer-source (audio-buffer (clj->js (scale (reverse bytes) -1 1)) *context*))))
 
-(defn wave [file]
-  (let [data (take 10000 (map s2c (partition 2 (map #(apply str %) (partition 2 file)))))
+(defn graph [file]
+  (let [data (reverse (map s2c (partition 2 (map #(apply str %) (partition 2 (drop 44 file))))))
         parts (.floor js/Math (/ (count data) 500))]
     [:svg {:width    "100%"
            :view-box (str "0 0 500 150")}
@@ -128,7 +128,7 @@
    [:div [button "Play"
         (fn [] (play! @file-atom))]]
    [:p]
-   [wave @file-atom]
+   [graph @file-atom]
    [:h3 "Header (bytes 0-44):"]
    [:textarea
     {:rows      6
