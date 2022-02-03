@@ -1,65 +1,12 @@
 (ns mecca-wav.app
   (:require 
-   [cljs.core.async :refer [<! chan put! close!]]
    [reagent.core :as r]
    [reagent.dom :as rdom]
    [goog.object :as o]
-   [goog.crypt :as crypt])
-  (:require-macros
-   [cljs.core.async.macros :refer [go go-loop]]))
+   [goog.crypt :as crypt]))
 
 (defonce ^:dynamic *context* (js/AudioContext.))
-
-(defn load-sound [named-url]
-  (let [out (chan)
-        req (js/XMLHttpRequest.)]
-    (set! (.-responseType req) "arraybuffer")
-    (set! (.-onload req) (fn [e]
-                           (if (= (.-status req) 200)
-                             (do (put! out (assoc named-url :buffer (.-response req)))
-                                 (close! out))
-                             (close! out))))
-    (.open req "GET" (:url named-url) true)
-    (.send req)
-    out))
-
-(defn decode [named-url]
-  (let [out (chan)]
-    (if (:buffer named-url)
-      (do
-        (.decodeAudioData
-         *context* (:buffer named-url)
-         (fn [decoded-buffer]
-           (put! out (assoc named-url :decoded-buffer decoded-buffer))
-           (close! out))
-         (fn []
-           (.error js/console "Error loading file " (prn named-url))
-           (close! out))))
-      (close! out))
-    out))
-
-(defn get-and-decode [named-url]
-  (go
-    (when-let [s (<! (load-sound named-url))]
-      (<! (decode s)))))
-
-(defn load-samples []
-  (go-loop [result {}
-            sounds (range 1 2)]
-    (if-not (nil? (first sounds))
-      (let [sound (first sounds)          
-            decoded-buffer (<! (get-and-decode {:url (str "/" sound ".mp3")
-                                                :sound sound}))]
-        (prn sound)
-        (prn decoded-buffer)
-        (recur (assoc result sound decoded-buffer)
-               (rest sounds)))
-      result)))
-
-(defonce loading-samples
-  (go
-    (def samples  (<! (load-samples)))
-    (prn "Samples loaded")))
+(defonce file-atom (r/atom ""))
 
 (defn scale
   "Scales a sequence of values to output between t-min and t-max."
@@ -73,6 +20,16 @@
                       t-min)
                   values))))
 
+(defn offsets
+  ([file n] (offsets file n (inc n)))
+  ([file from to]
+   (map #(apply str %)
+        (partition 2 (take (- (* 2 to) (* 2 from))
+                           (drop (* 2 from) file))))))
+
+(defn ascii [bytes]
+  (apply str (map #(js/String.fromCharCode (str "0x" %)) bytes)))
+
 (defn decimal [bytes]
   (js/parseInt (str "0x" (apply str (reverse bytes)))))
 
@@ -84,19 +41,6 @@
     (doseq [i (range frame-count)]
       (aset data i (nth input i)))
     buffer))
-
-(defn play-note! []
-   (let [audio-buffer  (:decoded-buffer (get samples 0))
-         sample-source (.createBufferSource *context*)
-         gain (.createGain *context*)]
-     (set! (.-buffer sample-source) audio-buffer)
-     (.setValueAtTime (.-gain gain) 0.4 (.-currentTime *context*))
-     (.connect sample-source gain)
-     (.connect gain (.-destination *context*))
-     (.start sample-source (.-currentTime *context*))
-     sample-source))
-
-(defonce file-atom (r/atom ""))
                                     
 (defn buffer-source [buffer]
   (let [source (.createBufferSource *context*)
@@ -121,24 +65,24 @@
                          #(reset! file-atom (-> % .-target .-result
                                                 (js/Uint8Array.)
                                                 crypt/byteArrayToHex
-                                                .toUpperCase
+                                                ;.toUpperCase
                                                 )))))}])
 
-(defn offsets
-  ([file n] (offsets file n (inc n)))
-  ([file from to]
-   (map #(apply str %)
-        (partition 2 (take (- (* 2 to) (* 2 from))
-                           (drop (* 2 from) file))))))
+(defn i16
+  "Converts an integer (maximum 32-bits) to a signed 16-bit integer."
+  [max-b32]
+  (let [data-view (js/DataView. (js/ArrayBuffer. 2))]
+    (.setUint16 data-view
+                0
+                max-b32)
+    (.getInt16 data-view
+               0)))
 
-(defn ascii [bytes]
-  (apply str (map #(js/String.fromCharCode (str "0x" %)) bytes)))
-
-
-(js/parseInt (str "0x" (apply str (reverse "0100"))))
-(decimal "0100")
-
-(decimal (offsets @file-atom 24 28))
+(defn s2c 
+  "Reads a pair of bytes as signed little endian 2's complement."
+  [bytes]
+  (let [dec (js/parseInt (str "0x" (apply str (reverse bytes))))]
+    (i16 dec)))
 
 (defn header [file]
   {:ckID            (ascii (offsets file 0 4))
@@ -155,26 +99,6 @@
    :dataID          (ascii (offsets file 36 40))
    :datasize        (decimal (offsets file 40 44))})
 
-(defn svg-bar [w h x y color]
-   [:rect
-    {:width        w
-     :height       h
-     :fill         color
-     :x            x
-     :y            y
-     :stroke       "#00d0ff"
-     :stroke-width 0.5}])
-
-(defn bars [items]
-  (let [bar-width (/ 500 (count items))]
-    (into [:g]
-          (for [bar (range (count items))]
-            (svg-bar bar-width
-                     2
-                     (* bar bar-width)
-                     (- 50 (* 2 (nth items bar)))
-                      "magenta")))))
-
 (defn button [label onclick]
   [:button
    {:on-click onclick}
@@ -184,27 +108,28 @@
   (str "M" (apply str (interpose " " (for [x (range (count points))]
                                        (str x " " (nth points x)))))))
 
+(defn play! [file]
+  (let [bytes (map s2c (partition 2 (map #(apply str %) (partition 2 file))))]
+    (buffer-source (audio-buffer (clj->js (scale (reverse bytes) -1 1)) *context*))))
+
+(defn wave [file]
+  (let [data (take 10000 (map s2c (partition 2 (map #(apply str %) (partition 2 file)))))
+        parts (.floor js/Math (/ (count data) 500))]
+    [:svg {:width    "100%"
+           :view-box (str "0 0 500 150")}
+     [:path {:d (make-path (scale (map first (partition parts data)) 0 150))
+             :stroke       "black"
+             :stroke-width 0.5
+             :fill         "none"}]]))
+
 (defn app []
   [:div#app
    [file-upload]
    [:div [button "Play"
-        (fn [] (buffer-source (audio-buffer (clj->js (scale (map decimal (map #(apply str %)
-                                                                              (partition 4 @file-atom)))
-                                                            -1 1)
-                                                            ) *context*)))]]
+        (fn [] (play! @file-atom))]]
    [:p]
-   [:svg {:width    "100%"
-          :view-box (str "0 0 500 150")}
-    [:path {:d            (let [data (let [data  (scale (map decimal (map #(apply str %)
-                                                                          (partition 4 @file-atom)))
-                                                        -1 1)
-                                           parts (.floor js/Math (/ (count data) 500))]
-                                       (map first (partition parts data)))]
-                            (make-path (scale data 0 150) ))
-            :stroke       "black"
-            :stroke-width 0.5
-            :fill         "none"}]]
-   [:h3 "Header:"]
+   [wave @file-atom]
+   [:h3 "Header (bytes 0-44):"]
    [:textarea
     {:rows      6
      :cols      50
@@ -214,14 +139,13 @@
    [:textarea
     {:rows      15
      :cols      110
-     :value     (str (map #(apply str %)(partition 4 @file-atom)))
+     :value     (str (map #(apply str %)(partition 2 @file-atom)))
      :read-only true}]
    [:h3 "Data (decimal):"]
 [:textarea
  {:rows      15
   :cols      110
-  :value     (str (map decimal (map #(apply str %)
-                                    (partition 4 @file-atom))))
+  :value     (str (map s2c (partition 2 (map #(apply str %) (partition 2 @file-atom)))))
   :read-only true}]])
 
 (defn render []

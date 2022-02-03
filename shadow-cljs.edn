@@ -3,7 +3,9 @@
                 "src/main"
                 "src/test"]
 
- :dependencies [[reagent "1.1.0"]]
+ :dependencies [[reagent "1.1.0"]
+                ;; lein or boot
+                [applied-science/js-interop  "0.3.1"]]
 
  :dev-http     {8080 "public"}
 

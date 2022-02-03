@@ -9,6 +9,8 @@
             AudioInputStream
             AudioSystem]))
 
+;; some code used from https://github.com/candera/dynne/blob/master/src/clj/dynne/sampled_sound.clj
+
 (defn- to-double-arrays
   "Return a seq of arrays of doubles that decode the values in buf."
   [^bytes buf ^long bytes-read ^long bytes-per-sample ^long chans]
@@ -37,17 +39,21 @@
              (sample-chunks ais chans bytes-per-sample chunk-size))))))
 
 (comment
-   (let [file                 (io/file "sine.wav")
+   (let [file                 (io/file "miccheck.wav")
          base-file-format     (-> file  AudioSystem/getAudioFileFormat .getFormat)
          base-file-properties (.properties base-file-format)
          chans                (.getChannels base-file-format)
          file-sample-rate     (.getSampleRate base-file-format)
          file-encoding        (.getEncoding base-file-format)
          bits-per-sample  16
-         bytes-per-sample (-> bits-per-sample (/ 8) long)]
-  (sample-chunks (AudioSystem/getAudioInputStream file)
-                   chans bytes-per-sample 10000))
+         bytes-per-sample (-> bits-per-sample (/ 8) long)
+         chunk-size 10000
+         buf (byte-array (* chunk-size chans bytes-per-sample))]
+         (.read (AudioSystem/getAudioInputStream file) buf)
+buf
   )
+
+  0x7eba6700
 
 (defn wav-bytes [file]
   (with-open [in  (io/input-stream file)
