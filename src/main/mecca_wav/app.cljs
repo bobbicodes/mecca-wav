@@ -106,21 +106,41 @@
 
 (defn make-path [points]
   (str "M" (apply str (interpose " " (for [x (range (count points))]
-                                       (str x " " (nth points x)))))))
+                                       (str x " " (- 150 (nth points x))))))))
+
+(defn pcm [file]
+  (let [file @file-atom
+        datasize (:datasize (header file))]
+    (map s2c (partition 2 (map #(apply str %)
+                               (take datasize (partition 2 (drop 88 file))))))))
+
+(def nes-tri
+  (take 100 (cycle (scale (reverse (mapcat #(repeat 13 %) (range 16)))
+                            -1 1))))
+
+(def nes-tri-buffer 
+  (audio-buffer (clj->js nes-tri) *context*))
 
 (defn play! [file]
-  (let [bytes (map s2c (partition 2 (map #(apply str %) (partition 2 (drop 44 file)))))]
+  (let [bytes (pcm file)]
     (buffer-source (audio-buffer (clj->js (scale (reverse bytes) -1 1)) *context*))))
 
+(partition 2 (pcm @file-atom))
+
 (defn graph [file]
-  (let [data (reverse (map s2c (partition 2 (map #(apply str %) (partition 2 (drop 44 file))))))
-        parts (.floor js/Math (/ (count data) 500))]
+  (let [data (pcm file)
+        len (count data)
+        parts (.ceil js/Math (/ len 500))
+        trimmed (partition parts data)
+        mean #(/ (apply + %) (count %))
+        median #(first (drop (/ 2 (count %)) (sort %)))]
     [:svg {:width    "100%"
-           :view-box (str "0 0 500 150")}
-     [:path {:d (make-path (scale (map first (partition parts data)) 0 150))
+           :view-box (str "0 0 " (count trimmed) " 150")}
+     [:path {:d (make-path (reverse (scale (map mean trimmed) 0 150)))
              :stroke       "black"
              :stroke-width 0.5
              :fill         "none"}]]))
+
 
 (defn app []
   [:div#app
@@ -139,13 +159,13 @@
    [:textarea
     {:rows      15
      :cols      110
-     :value     (str (map #(apply str %)(partition 2 @file-atom)))
+     :value     (str (map #(apply str %)(partition 2 (drop 88 @file-atom))))
      :read-only true}]
    [:h3 "Data (decimal):"]
 [:textarea
  {:rows      15
   :cols      110
-  :value     (str (map s2c (partition 2 (map #(apply str %) (partition 2 @file-atom)))))
+  :value     (str (pcm @file-atom))
   :read-only true}]])
 
 (defn render []
